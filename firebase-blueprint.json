@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account information, trust standings, and platform role.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email address of the user."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["USER", "ADMIN"],
+          "description": "System role determining access privileges."
+        },
+        "trustScore": {
+          "type": "number",
+          "description": "Dynamically adjusted seller reliability score (0-100)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of user registration."
+        }
+      },
+      "required": ["id", "email", "name", "role", "trustScore", "createdAt"]
+    },
+    "GiftCard": {
+      "title": "Gift Card",
+      "description": "Gift card trade entry submitted for verification and buyout.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the gift card."
+        },
+        "sellerId": {
+          "type": "string",
+          "description": "The ID of the user selling this card."
+        },
+        "brand": {
+          "type": "string",
+          "description": "The retail brand of the gift card (e.g. Amazon, Apple)."
+        },
+        "initialBalance": {
+          "type": "number",
+          "description": "The face value balance on the card."
+        },
+        "offerAmount": {
+          "type": "number",
+          "description": "The dynamic payout offer calculated by the pricing engine."
+        },
+        "cardNumber": {
+          "type": "string",
+          "description": "The confidential, fully encrypted card code/serial."
+        },
+        "pin": {
+          "type": "string",
+          "description": "Optional PIN for balance check validation."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "VERIFIED", "PAID", "REJECTED"],
+          "description": "Current status in verification and payout pipelines."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of submission."
+        }
+      },
+      "required": ["id", "sellerId", "brand", "initialBalance", "offerAmount", "cardNumber", "status", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Direct settlement transaction mapped to a verified card trade.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the transaction."
+        },
+        "giftCardId": {
+          "type": "string",
+          "description": "The associated gift card ID."
+        },
+        "payoutMethod": {
+          "type": "string",
+          "enum": ["ACH", "PAYPAL", "DEBIT_CARD"],
+          "description": "Preferred settlement release method."
+        },
+        "payoutDetails": {
+          "type": "string",
+          "description": "Transfer identifier (e.g., email address, bank details)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "PROCESSING", "PAID", "FAILED"],
+          "description": "Current payment gateway clearance state."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of payout settlement."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of transaction initialization."
+        }
+      },
+      "required": ["id", "giftCardId", "payoutMethod", "payoutDetails", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Global user directory containing roles and reliability standing scores."
+    },
+    "giftCards": {
+      "schema": "GiftCard",
+      "description": "Resale submissions pending verification or completed."
+    },
+    "transactions": {
+      "schema": "Transaction",
+      "description": "Settlement payout logs mapped to resale submissions."
+    }
+  }
+}

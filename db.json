@@ -1,0 +1,74 @@
+{
+  "users": [
+    {
+      "id": "usr-default-1",
+      "email": "emma432cent@gmail.com",
+      "name": "Emma Cent",
+      "role": "USER",
+      "trustScore": 85,
+      "createdAt": "2026-06-24T15:19:28.958Z"
+    },
+    {
+      "id": "usr-admin-1",
+      "email": "admin@giftcardresale.com",
+      "name": "System Admin",
+      "role": "ADMIN",
+      "trustScore": 100,
+      "createdAt": "2026-06-24T15:19:28.958Z"
+    },
+    {
+      "id": "usr-lowtrust-1",
+      "email": "risky.seller@example.com",
+      "name": "Jordan Low",
+      "role": "USER",
+      "trustScore": 45,
+      "createdAt": "2026-06-24T15:19:28.958Z"
+    }
+  ],
+  "giftCards": [
+    {
+      "id": "card-1",
+      "sellerId": "usr-default-1",
+      "brand": "Amazon",
+      "initialBalance": 100,
+      "offerAmount": 85,
+      "cardNumber": "4820-1928-3928-4829",
+      "pin": "4921",
+      "status": "PENDING",
+      "createdAt": "2026-06-24T13:19:28.958Z"
+    },
+    {
+      "id": "card-2",
+      "sellerId": "usr-lowtrust-1",
+      "brand": "Starbucks",
+      "initialBalance": 50,
+      "offerAmount": 32.5,
+      "cardNumber": "6039-1928-4820-2918",
+      "pin": "1920",
+      "status": "VERIFIED",
+      "createdAt": "2026-06-24T03:19:28.958Z"
+    },
+    {
+      "id": "card-3",
+      "sellerId": "usr-default-1",
+      "brand": "Target",
+      "initialBalance": 200,
+      "offerAmount": 160,
+      "cardNumber": "7019-2091-3849-2911",
+      "pin": "9821",
+      "status": "PAID",
+      "createdAt": "2026-06-23T15:19:28.958Z"
+    }
+  ],
+  "transactions": [
+    {
+      "id": "tx-1",
+      "giftCardId": "card-3",
+      "payoutMethod": "PAYPAL",
+      "payoutDetails": "emma432cent@gmail.com",
+      "status": "PAID",
+      "completedAt": "2026-06-23T16:19:28.958Z",
+      "createdAt": "2026-06-23T15:19:28.958Z"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Gift Card Resale Platform",
+  "description": "Secure, direct-buy platform to sell unused gift cards for instant payouts with an automated valuation engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

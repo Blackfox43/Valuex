@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum CardStatus {
+  PENDING
+  VERIFIED
+  PAID
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
+model User {
+  id         String     @id @default(uuid())
+  email      String     @unique
+  name       String?
+  role       Role       @default(USER)
+  trustScore Int        @default(80) // Scale 0-100, impacts payout percentage
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  giftCards  GiftCard[]
+}
+
+model GiftCard {
+  id             String       @id @default(uuid())
+  sellerId       String
+  seller         User         @relation(fields: [sellerId], references: [id])
+  brand          String       // e.g., "Amazon", "Target", "Starbucks"
+  initialBalance Decimal      // Current face value of the card
+  offerAmount    Decimal      // Calculated direct payout amount
+  cardNumber     String       // Masked or encrypted in production
+  pin            String?      // Optional for brands without PINs
+  status         CardStatus   @default(PENDING)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  transaction    Transaction?
+}
+
+model Transaction {
+  id            String       @id @default(uuid())
+  giftCardId    String       @unique
+  giftCard      GiftCard     @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+  payoutMethod  String       // e.g., "ACH", "PAYPAL", "DEBIT_CARD"
+  payoutDetails String       // Masked email, bank details, or card token
+  status        PayoutStatus @default(PENDING)
+  completedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
