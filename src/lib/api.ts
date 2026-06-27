@@ -1,6 +1,7 @@
 /**
  * Frontend API client to query the Express full-stack backend
  */
+import { auth } from "./firebaseClient.ts";
 
 export interface User {
   id: string;
@@ -70,17 +71,37 @@ export interface AdsSettings {
   estimatedEarnings: number;
 }
 
+// Authenticated fetch wrapper to automatically attach JWT ID Token
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers || {});
+  
+  try {
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      const idToken = await currentUser.getIdToken();
+      headers.set("Authorization", `Bearer ${idToken}`);
+    }
+  } catch (err) {
+    console.error("Failed to inject idToken for authenticated request:", err);
+  }
+
+  return fetch(url, {
+    ...options,
+    headers
+  });
+}
+
 export const api = {
   // Get currently logged-in user
   async getUser(): Promise<User> {
-    const res = await fetch("/api/user");
+    const res = await authFetch("/api/user");
     if (!res.ok) throw new Error("Failed to load user profile");
     return res.json();
   },
 
   // Switch active user
   async switchUser(userId: string): Promise<{ success: boolean; user: User }> {
-    const res = await fetch("/api/user/switch", {
+    const res = await authFetch("/api/user/switch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
@@ -91,7 +112,7 @@ export const api = {
 
   // List all users
   async listUsers(): Promise<User[]> {
-    const res = await fetch("/api/users");
+    const res = await authFetch("/api/users");
     if (!res.ok) throw new Error("Failed to load users");
     return res.json();
   },
@@ -101,7 +122,7 @@ export const api = {
     const params = new URLSearchParams({ brand, balance: balance.toString() });
     if (userId) params.append("userId", userId);
     
-    const res = await fetch(`/api/pricing/evaluate?${params.toString()}`);
+    const res = await authFetch(`/api/pricing/evaluate?${params.toString()}`);
     if (!res.ok) {
       const errorData = await res.json();
       throw new Error(errorData.error || "Failed to calculate valuation");
@@ -111,7 +132,7 @@ export const api = {
 
   // Get all cards (visible according to permissions)
   async getCards(): Promise<GiftCard[]> {
-    const res = await fetch("/api/cards");
+    const res = await authFetch("/api/cards");
     if (!res.ok) throw new Error("Failed to retrieve gift cards");
     return res.json();
   },
@@ -125,7 +146,7 @@ export const api = {
     payoutMethod: 'ACH' | 'PAYPAL' | 'DEBIT_CARD';
     payoutDetails: string;
   }): Promise<{ card: GiftCard; transaction: any; valuation: ValuationResult }> {
-    const res = await fetch("/api/cards", {
+    const res = await authFetch("/api/cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -139,28 +160,28 @@ export const api = {
 
   // Verify a gift card balance (Admin only)
   async verifyCard(id: string): Promise<{ success: boolean; card: GiftCard }> {
-    const res = await fetch(`/api/cards/${id}/verify`, { method: "POST" });
+    const res = await authFetch(`/api/cards/${id}/verify`, { method: "POST" });
     if (!res.ok) throw new Error("Verification failed or permission denied");
     return res.json();
   },
 
   // Trigger payout for a gift card (Admin only)
   async triggerPayout(id: string): Promise<{ success: boolean; card: GiftCard; transaction: any }> {
-    const res = await fetch(`/api/cards/${id}/pay`, { method: "POST" });
+    const res = await authFetch(`/api/cards/${id}/pay`, { method: "POST" });
     if (!res.ok) throw new Error("Payout action failed or permission denied");
     return res.json();
   },
 
   // Reject a gift card (Admin only)
   async rejectCard(id: string): Promise<{ success: boolean; card: GiftCard }> {
-    const res = await fetch(`/api/cards/${id}/reject`, { method: "POST" });
+    const res = await authFetch(`/api/cards/${id}/reject`, { method: "POST" });
     if (!res.ok) throw new Error("Card rejection failed or permission denied");
     return res.json();
   },
 
   // Set trust score for a user (Admin only)
   async updateUserTrustScore(userId: string, trustScore: number): Promise<{ success: boolean; user: User }> {
-    const res = await fetch(`/api/user/${userId}/trust-score`, {
+    const res = await authFetch(`/api/user/${userId}/trust-score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ trustScore }),
@@ -171,7 +192,7 @@ export const api = {
 
   // Upgrade the currently logged-in user to VIP Pro (Monetization feature)
   async upgradeToPro(): Promise<{ success: boolean; user: User }> {
-    const res = await fetch("/api/user/upgrade-pro", {
+    const res = await authFetch("/api/user/upgrade-pro", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
@@ -181,14 +202,14 @@ export const api = {
 
   // Get active Google AdSense settings
   async getAdsSettings(): Promise<AdsSettings> {
-    const res = await fetch("/api/ads");
+    const res = await authFetch("/api/ads");
     if (!res.ok) throw new Error("Failed to load Google AdSense settings");
     return res.json();
   },
 
   // Update Google AdSense settings (Admin only)
   async updateAdsSettings(updates: Partial<AdsSettings>): Promise<{ success: boolean; adsSettings: AdsSettings }> {
-    const res = await fetch("/api/ads", {
+    const res = await authFetch("/api/ads", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
@@ -199,7 +220,7 @@ export const api = {
 
   // Track ad impression or click event and update estimated revenue
   async trackAdEvent(type: 'impression' | 'click'): Promise<{ success: boolean; adsSettings: AdsSettings; revenueEarned: number }> {
-    const res = await fetch("/api/ads/event", {
+    const res = await authFetch("/api/ads/event", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type }),
@@ -208,9 +229,21 @@ export const api = {
     return res.json();
   },
 
+  // Get active system integration and credentials status
+  async getSystemStatus(): Promise<{
+    stripeLive: boolean;
+    cardcashLive: boolean;
+    giftbitLive: boolean;
+    geminiLive: boolean;
+  }> {
+    const res = await authFetch("/api/system/status");
+    if (!res.ok) throw new Error("Failed to load integration status");
+    return res.json();
+  },
+
   // Reset database state to defaults
   async resetState(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch("/api/reset", { method: "POST" });
+    const res = await authFetch("/api/reset", { method: "POST" });
     if (!res.ok) throw new Error("Failed to reset application state");
     return res.json();
   }

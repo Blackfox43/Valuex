@@ -50,6 +50,14 @@ export default function AdminDashboard({ adminUser, onRefreshPlatform }: AdminDa
   const [adsNativeSlot, setAdsNativeSlot] = useState<string>("");
   const [adsEnabled, setAdsEnabled] = useState<boolean>(true);
 
+  // System integration status state
+  const [systemStatus, setSystemStatus] = useState<{
+    stripeLive: boolean;
+    cardcashLive: boolean;
+    giftbitLive: boolean;
+    geminiLive: boolean;
+  } | null>(null);
+
   const loadAdsSettings = async () => {
     setAdsLoading(true);
     try {
@@ -71,13 +79,18 @@ export default function AdminDashboard({ adminUser, onRefreshPlatform }: AdminDa
     setLoading(true);
     setError("");
     try {
-      const [cardsData, usersData] = await Promise.all([
+      const [cardsData, usersData, statusData] = await Promise.all([
         api.getCards(),
         api.listUsers(),
+        api.getSystemStatus().catch(err => {
+          console.warn("Failed to fetch system status", err);
+          return { stripeLive: false, cardcashLive: false, giftbitLive: false, geminiLive: false };
+        }),
         loadAdsSettings()
       ]);
       setCards(cardsData);
       setUsers(usersData);
+      setSystemStatus(statusData);
     } catch (err: any) {
       setError("Failed to load admin verification data queue");
       console.error(err);
@@ -251,6 +264,131 @@ export default function AdminDashboard({ adminUser, onRefreshPlatform }: AdminDa
           </Button>
         </div>
       </div>
+
+      {/* Dynamic API Integration & Simulation Registry */}
+      <Card id="admin-integration-registry" className="bg-white border border-slate-200 shadow-sm mt-1">
+        <CardHeader className="bg-slate-50/40 p-3 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Activity className="w-4 h-4 text-indigo-600" />
+              <span>Programmatic Integrations & Live Gateway Registry</span>
+            </CardTitle>
+            <CardDescription className="text-[11px] text-slate-500 font-medium">
+              Monitor active production APIs, verify secret credential states, and track sandbox fallbacks.
+            </CardDescription>
+          </div>
+          <span className="text-[10px] font-bold bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded font-mono">
+            {(!systemStatus || (!systemStatus.stripeLive && !systemStatus.cardcashLive && !systemStatus.giftbitLive)) ? "SIMULATOR ACTIVE" : "MIXED API MODE"}
+          </span>
+        </CardHeader>
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Stripe Payouts API */}
+            <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase font-sans">Stripe Settlement Payouts</span>
+                  {systemStatus?.stripeLive ? (
+                    <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 py-0.2 rounded font-mono">LIVE API</span>
+                  ) : (
+                    <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-150 px-1.5 py-0.2 rounded font-mono">SIMULATED</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 font-medium leading-normal">
+                  Settles bank (ACH), debit cards, and credit transfers to sellers.
+                </p>
+              </div>
+              <div className="pt-1.5 border-t border-slate-100 text-[9px] font-mono font-medium text-slate-400">
+                {systemStatus?.stripeLive ? (
+                  <span className="text-emerald-600 font-bold flex items-center gap-1">✔ Key loaded: STRIPE_SECRET_KEY</span>
+                ) : (
+                  <span>Using Stripe mock sandbox gateway. Add STRIPE_SECRET_KEY to go live.</span>
+                )}
+              </div>
+            </div>
+
+            {/* CardCash programmatic API */}
+            <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase font-sans">CardCash Verification</span>
+                  {systemStatus?.cardcashLive ? (
+                    <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 py-0.2 rounded font-mono">LIVE API</span>
+                  ) : (
+                    <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-150 px-1.5 py-0.2 rounded font-mono">SIMULATED</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 font-medium leading-normal">
+                  Authenticates card numbers and returns real balance quotes.
+                </p>
+              </div>
+              <div className="pt-1.5 border-t border-slate-100 text-[9px] font-mono font-medium text-slate-400">
+                {systemStatus?.cardcashLive ? (
+                  <span className="text-emerald-600 font-bold flex items-center gap-1">✔ Credentials loaded</span>
+                ) : (
+                  <span>Using mock checker. Add CARDCASH_API_EMAIL & PASSWORD to connect.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Giftbit programmatic API */}
+            <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase font-sans">Giftbit Enterprise</span>
+                  {systemStatus?.giftbitLive ? (
+                    <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 py-0.2 rounded font-mono">LIVE API</span>
+                  ) : (
+                    <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-150 px-1.5 py-0.2 rounded font-mono">SIMULATED</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 font-medium leading-normal">
+                  Verifies gift card status through direct brand issuer networks.
+                </p>
+              </div>
+              <div className="pt-1.5 border-t border-slate-100 text-[9px] font-mono font-medium text-slate-400">
+                {systemStatus?.giftbitLive ? (
+                  <span className="text-emerald-600 font-bold flex items-center gap-1">✔ Key loaded: GIFTBIT_API_KEY</span>
+                ) : (
+                  <span>Using mock checker. Add GIFTBIT_API_KEY to go live.</span>
+                )}
+              </div>
+            </div>
+
+            {/* Gemini Core API */}
+            <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 space-y-1.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase font-sans">Gemini Pricing Engine</span>
+                  {systemStatus?.geminiLive ? (
+                    <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 py-0.2 rounded font-mono">LIVE API</span>
+                  ) : (
+                    <span className="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-150 px-1.5 py-0.2 rounded font-mono">SIMULATED</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 font-medium leading-normal">
+                  Generates trust rating penalties, risk estimates, and smart yield formulas.
+                </p>
+              </div>
+              <div className="pt-1.5 border-t border-slate-100 text-[9px] font-mono font-medium text-slate-400">
+                {systemStatus?.geminiLive ? (
+                  <span className="text-emerald-600 font-bold flex items-center gap-1">✔ Server-side key loaded</span>
+                ) : (
+                  <span className="text-indigo-600 font-semibold">Active on demand. Configure in Secrets panel.</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-[10px] text-slate-600 font-medium flex items-start gap-2 leading-relaxed">
+            <Sparkles className="w-4.5 h-4.5 text-indigo-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold text-slate-800 block">How to configure credentials to disable simulation mode:</span>
+              To transition any service to live mode, navigate to the <strong className="text-slate-800">Secrets (Settings) panel</strong> in the AI Studio editor interface and insert your live api keys. Your Express backend automatically registers secret key presence at runtime and transitions relevant gateways to live production processing instantaneously.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Verification Queue Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { db } from "./src/lib/db.js";
 import { calculatePayout } from "./src/lib/pricing.js";
@@ -9,6 +10,15 @@ import { checkGiftCardBalance } from "./src/lib/balanceChecker.js";
 // Make sure process.env contains needed defaults
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
 
+// Extend Express Request interface to include the authenticated user property
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -16,26 +26,103 @@ async function startServer() {
   // Body parser middleware
   app.use(express.json());
 
-  // Current session state (simulated session)
+  // Current session state (simulated session fallback)
   // Default logged in user is Emma Cent (emma432cent@gmail.com)
   let currentUserId = "usr-default-1";
+
+  // Middleware to authenticate Firebase Auth ID Token
+  async function authenticateUser(req: any, res: any, next: any) {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        // Fallback/Simulated context for local tests, direct previews, or dev swapper compatibility
+        const fallbackUser = await db.getUserById(currentUserId);
+        req.user = fallbackUser;
+        return next();
+      }
+
+      const idToken = authHeader.split(" ")[1];
+      
+      // Get API Key from config
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      let apiKey = "";
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        apiKey = config.apiKey;
+      }
+
+      if (!apiKey) {
+        throw new Error("Firebase API key not configured");
+      }
+
+      // Call Google's Identity Toolkit API to verify the ID Token
+      const verifyRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken })
+        }
+      );
+
+      if (!verifyRes.ok) {
+        const errorData = await verifyRes.json().catch(() => ({}));
+        return res.status(401).json({ error: "Invalid or expired session token", details: errorData });
+      }
+
+      const data: any = await verifyRes.json();
+      const googleUser = data.users?.[0];
+      if (!googleUser) {
+        return res.status(401).json({ error: "No user found for the provided session token" });
+      }
+
+      const { localId, email, displayName } = googleUser;
+      
+      // Set default values if name is missing
+      const name = displayName || email.split("@")[0] || "User";
+
+      // Determine the role
+      const lowerEmail = email.toLowerCase();
+      const isAdminEmail = lowerEmail === "emma432cent@gmail.com" || 
+                         lowerEmail === "admin@giftcardresale.com" || 
+                         lowerEmail.startsWith("admin") || 
+                         lowerEmail.endsWith("@giftcardresale.com");
+      const role = isAdminEmail ? "ADMIN" : "USER";
+
+      // Upsert user inside Firestore database
+      const dbUser = await db.upsertUserWithId(localId, {
+        email,
+        name,
+        role,
+        trustScore: isAdminEmail ? 100 : 85
+      });
+
+      req.user = dbUser;
+      next();
+    } catch (error: any) {
+      console.error("Authentication Error:", error.message);
+      return res.status(401).json({ error: "Authentication pipeline failed", details: error.message });
+    }
+  }
+
+  // Mount Auth Middleware to /api
+  app.use("/api", authenticateUser);
 
   // --- API ROUTES ---
 
   // Get active session user
   app.get("/api/user", async (req, res) => {
     try {
-      const user = await db.getUserById(currentUserId);
-      if (!user) {
+      if (!req.user) {
         return res.status(404).json({ error: "Active user session not found" });
       }
-      res.json(user);
+      res.json(req.user);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // Switch session user (useful for testing admin vs user views)
+  // Switch session user (useful for testing admin vs user views in simulation)
   app.post("/api/user/switch", async (req, res) => {
     try {
       const { userId } = req.body;
@@ -63,7 +150,7 @@ async function startServer() {
   // Upgrade user to Pro (Monetization sub)
   app.post("/api/user/upgrade-pro", async (req, res) => {
     try {
-      const user = await db.getUserById(currentUserId);
+      const user = req.user;
       if (!user) {
         return res.status(404).json({ error: "User session not found" });
       }
@@ -89,7 +176,7 @@ async function startServer() {
   // Update Google AdSense settings (Admin only)
   app.post("/api/ads", async (req, res) => {
     try {
-      const activeUser = await db.getUserById(currentUserId);
+      const activeUser = req.user;
       if (!activeUser || activeUser.role !== "ADMIN") {
         return res.status(403).json({ error: "Access denied. Admin role required." });
       }
@@ -141,7 +228,7 @@ async function startServer() {
     try {
       const brand = req.query.brand as string;
       const balanceStr = req.query.balance as string;
-      const userId = (req.query.userId as string) || currentUserId;
+      const userId = (req.query.userId as string) || req.user?.id;
       const processingSpeed = (req.query.processingSpeed as any) || "STANDARD";
 
       if (!brand || !balanceStr) {
@@ -165,7 +252,7 @@ async function startServer() {
   // Get all cards (Admins see everything, regular users see their own)
   app.get("/api/cards", async (req, res) => {
     try {
-      const user = await db.getUserById(currentUserId);
+      const user = req.user;
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
@@ -189,7 +276,7 @@ async function startServer() {
         res.json(enrichedCards);
       } else {
         // Filter for current seller
-        res.json(enrichedCards.filter(c => c.sellerId === currentUserId));
+        res.json(enrichedCards.filter(c => c.sellerId === user.id));
       }
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -216,7 +303,7 @@ async function startServer() {
         return res.status(400).json({ error: "Card number must be at least 8 digits long" });
       }
 
-      const user = await db.getUserById(currentUserId);
+      const user = req.user;
       if (!user) {
         return res.status(401).json({ error: "Unauthorized" });
       }
@@ -259,7 +346,7 @@ async function startServer() {
   // Verify gift card balance (Admin Only) - Programmatic Balance Checker Integration
   app.post("/api/cards/:id/verify", async (req, res) => {
     try {
-      const user = await db.getUserById(currentUserId);
+      const user = req.user;
       if (!user || user.role !== "ADMIN") {
         return res.status(403).json({ error: "Forbidden: Admin access required" });
       }
@@ -324,7 +411,7 @@ async function startServer() {
   // Pay/Trigger Instant Payout workflow (Admin Only)
   app.post("/api/cards/:id/pay", async (req, res) => {
     try {
-      const user = await db.getUserById(currentUserId);
+      const user = req.user;
       if (!user || user.role !== "ADMIN") {
         return res.status(403).json({ error: "Forbidden: Admin access required" });
       }
@@ -389,7 +476,7 @@ async function startServer() {
   // Reject gift card (Admin Only)
   app.post("/api/cards/:id/reject", async (req, res) => {
     try {
-      const user = await db.getUserById(currentUserId);
+      const user = req.user;
       if (!user || user.role !== "ADMIN") {
         return res.status(403).json({ error: "Forbidden: Admin access required" });
       }
@@ -425,7 +512,7 @@ async function startServer() {
   // Admin resets or tweaks user trust score
   app.post("/api/user/:id/trust-score", async (req, res) => {
     try {
-      const adminUser = await db.getUserById(currentUserId);
+      const adminUser = req.user;
       if (!adminUser || adminUser.role !== "ADMIN") {
         return res.status(403).json({ error: "Forbidden: Admin access required" });
       }
@@ -443,6 +530,20 @@ async function startServer() {
       }
 
       res.json({ success: true, user: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get active system integration and credentials status
+  app.get("/api/system/status", async (req, res) => {
+    try {
+      res.json({
+        stripeLive: !!process.env.STRIPE_SECRET_KEY,
+        cardcashLive: !!process.env.CARDCASH_API_EMAIL && !!process.env.CARDCASH_API_PASSWORD,
+        giftbitLive: !!process.env.GIFTBIT_API_KEY,
+        geminiLive: !!process.env.GEMINI_API_KEY
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
